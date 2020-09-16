@@ -119,8 +119,8 @@ def build_env(args):
 
 
 def get_env_type(args):
-    env_id = args.env
-
+    env_id_full = args.env
+    env_id = env_id_full.split("|")[0]
     if args.env_type is not None:
         return args.env_type, env_id
 
@@ -142,7 +142,7 @@ def get_env_type(args):
             env_type = re.sub(r':.*', '', env_id)
         assert env_type is not None, 'env_id {} is not recognized in env types'.format(env_id, _game_envs.keys())
 
-    return env_type, env_id
+    return env_type, env_id_full
 
 
 def get_default_network(env_type):

@@ -263,14 +263,51 @@ class LazyFrames(object):
     def frame(self, i):
         return self._force()[..., i]
 
+from gym.spaces.discrete import Discrete
+
 def make_atari(env_id, max_episode_steps=None):
+    splt = env_id.split("|")
+    env_id = splt[0]
     env = gym.make(env_id)
     assert 'NoFrameskip' in env.spec.id
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
     if max_episode_steps is not None:
         env = TimeLimit(env, max_episode_steps=max_episode_steps)
+
+    if len(splt) > 1:
+        splt_id = splt[1]
+        funcType = type(env.step)
+        # Overwrite env action space!
+        if splt[1][:-1] == "extra_dangling":
+            print("act: ", env.action_space)
+            # quit()
+            def new_step(self, action):
+                #if action == 4:
+                #    action = 3 # note: this is duplicate, not dangling!
+                # print("action:", action)
+                action = action % 6
+                return self._step(action) # ignore dangling action
+            env.action_space = Discrete(6+6*int(splt[1][-1]))
+            env._step = env.step
+            env.step = new_step.__get__(env, type(env)) #funcType(new_step,env,type(env))
+        elif splt[1] == "extra_duplicate":
+            def new_step(self, action):
+                if action[-1] != 0.0:
+                    action[-2] = 1.0 # duplicate action!
+                return self.step(action[:-1]) # ignore dangling action
+            env.step = new_step
+
     return env
+
+#def make_atari(env_id, max_episode_steps=None):
+#    env = gym.make(env_id)
+#    assert 'NoFrameskip' in env.spec.id
+#    env = NoopResetEnv(env, noop_max=30)
+#    env = MaxAndSkipEnv(env, skip=4)
+#    if max_episode_steps is not None:
+#        env = TimeLimit(env, max_episode_steps=max_episode_steps)
+#    return env
 
 def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, scale=False):
     """Configure environment for DeepMind-style Atari.
