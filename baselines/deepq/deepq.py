@@ -315,19 +315,22 @@ def learn(env,
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(t)))
                 logger.dump_tabular()
 
-            if (checkpoint_freq is not None and t > learning_starts and
-                    num_episodes > 100 and t % checkpoint_freq == 0) or t == 0:
-                if saved_mean_reward is None or mean_100ep_reward > saved_mean_reward:
-                    if print_freq is not None:
+            #if (checkpoint_freq is not None and t > learning_starts and
+            #        num_episodes > 100 and t % checkpoint_freq == 0) or t == 0:
+            if (t == 0 or t % checkpoint_freq == 0):
+                #if saved_mean_reward is None or mean_100ep_reward > saved_mean_reward:
+                if t > 0:
+                    #if print_freq is not None:
+                    if True:
                         logger.log("Saving model due to mean reward increase: {} -> {}".format(
                                    saved_mean_reward, mean_100ep_reward))
-                    save_variables(model_file+"__{}".format(t))
+                    save_variables(model_file+"__t{}__s{}".format(t, mean_100ep_reward))
                     model_saved = True
                     saved_mean_reward = mean_100ep_reward
                 if t == 0:
                     logger.log("Saving model init: {} -> {}".format(
                         saved_mean_reward, mean_100ep_reward))
-                    save_variables(model_file+"__{}".format(t))
+                    save_variables(model_file+"__t{}__s{}".format(t, mean_100ep_reward))
                     model_saved = True
                     saved_mean_reward = mean_100ep_reward
         if model_saved:

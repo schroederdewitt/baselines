@@ -242,6 +242,31 @@ def main(args):
                     print('episode_rew={}'.format(episode_rew[i]))
                     episode_rew[i] = 0
 
+    if args.getqs:
+        logger.log("Running trained model to retrieve q...")
+        obs = env.reset()
+
+        state = model.initial_state if hasattr(model, 'initial_state') else None
+        dones = np.zeros((1,))
+
+        episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
+        while True:
+            if state is not None:
+                actions, _, state, info = model.step(obs,S=state, M=dones)
+            else:
+                actions, _, _, info = model.step(obs)
+            actions, q_values = actions
+            obs, rew, done, _ = env.step(actions)
+            print("Q values: ", q_values, " Actions: ", actions)
+            episode_rew += rew
+            # env.render()
+            done_any = done.any() if isinstance(done, np.ndarray) else done
+            if done_any:
+
+                for i in np.nonzero(done)[0]:
+                    print('episode_rew={}'.format(episode_rew[i]))
+                    episode_rew[i] = 0
+                env.reset()
     env.close()
 
     return model

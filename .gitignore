@@ -34,4 +34,5 @@ src
 .cache
 
 MUJOCO_LOG.TXT
-runs/
+res/
+checkpoints/
