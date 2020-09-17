@@ -287,16 +287,19 @@ def main(args):
         with open("obs_out.pkl", "wb") as f:
             pickle.dump(n_obs, f)
             while True:
+
                 if state is not None:
                     actions, _, state, info = model.step(obs,S=state, M=dones)
                 else:
                     actions, _, _, info = model.step(obs)
                 actions, q_values = actions
                 obs, rew, done, _ = env.step(actions)
-                pickle.dump(obs, f)
                 if obs_ctr >= n_obs:
                     end_t.append(-1)
                     break
+
+                print("pickling obs... {}".format(obs_ctr))
+                pickle.dump(obs, f)
                 # print("Q values: ", q_values, " Actions: ", actions)
 
                 episode_rew += rew
@@ -309,7 +312,8 @@ def main(args):
                         episode_rew[i] = 0
                     env.reset()
                 obs_ctr += 1
-            pickle.dump(end_t)
+            print("pickling end_t {}".format(end_t))
+            pickle.dump(end_t, f)
         env.close()
 
     if args.obsqs:
@@ -318,6 +322,7 @@ def main(args):
 
         episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
 
+        # with open("analysis/data/obs/q_pongv4nf_orig_t1000000_r20.0.pkl", "rb") as f:
         with open("obs_out.pkl", "rb") as f:
             n = pickle.load(f)
             with open("q_out.pkl", "wb") as g:
@@ -332,6 +337,7 @@ def main(args):
                     print("qvals!", q_values)
                     pickle.dump(q_values, g)
                 end_t = pickle.load(f)
+                print("END T: ", end_t)
                 pickle.dump(end_t, g)
 
     return model
