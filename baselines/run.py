@@ -241,8 +241,9 @@ def main(args):
                 for i in np.nonzero(done)[0]:
                     print('episode_rew={}'.format(episode_rew[i]))
                     episode_rew[i] = 0
+        env.close()
 
-    if args.getqs:
+    if args.printqs:
         logger.log("Running trained model to retrieve q...")
         obs = env.reset()
 
@@ -267,7 +268,71 @@ def main(args):
                     print('episode_rew={}'.format(episode_rew[i]))
                     episode_rew[i] = 0
                 env.reset()
-    env.close()
+
+        env.close()
+
+    if args.getobs:
+        logger.log("Running trained model to retrieve observations...")
+        obs = env.reset()
+
+        state = model.initial_state if hasattr(model, 'initial_state') else None
+        dones = np.zeros((1,))
+
+        episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
+
+        obs_ctr = 0
+        n_obs = 10000
+        import pickle
+        end_t = []
+        with open("obs_out.pkl", "wb") as f:
+            pickle.dump(n_obs, f)
+            while True:
+                if state is not None:
+                    actions, _, state, info = model.step(obs,S=state, M=dones)
+                else:
+                    actions, _, _, info = model.step(obs)
+                actions, q_values = actions
+                obs, rew, done, _ = env.step(actions)
+                pickle.dump(obs, f)
+                if obs_ctr >= n_obs:
+                    end_t.append(-1)
+                    break
+                # print("Q values: ", q_values, " Actions: ", actions)
+
+                episode_rew += rew
+                # env.render()
+                done_any = done.any() if isinstance(done, np.ndarray) else done
+                if done_any:
+                    end_t.append(obs_ctr)
+                    for i in np.nonzero(done)[0]:
+                        print('episode_rew={}'.format(episode_rew[i]))
+                        episode_rew[i] = 0
+                    env.reset()
+                obs_ctr += 1
+            pickle.dump(end_t)
+        env.close()
+
+    if args.obsqs:
+        import pickle
+        logger.log("Running obsqs...")
+
+        episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
+
+        with open("obs_out.pkl", "rb") as f:
+            n = pickle.load(f)
+            with open("q_out.pkl", "wb") as g:
+                pickle.dump(n, g)
+                for _ in range(n):
+                    # if state is not None:
+                    #    actions, _, state, _ = model.step(obs,S=state, M=dones)
+                    # else:
+                    obs = pickle.load(f)
+                    actions, _, _, _ = model.step(obs)
+                    actions, q_values = actions
+                    print("qvals!", q_values)
+                    pickle.dump(q_values, g)
+                end_t = pickle.load(f)
+                pickle.dump(end_t, g)
 
     return model
 
