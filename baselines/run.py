@@ -73,10 +73,15 @@ def train(args, extra_args):
 
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
+    if args.use_softmax_policy:
+        alg_kwargs["log_beta_range"] = args.log_beta_range
+        alg_kwargs["eval_log_betas"] = args.eval_log_betas
+
     model = learn(
         env=env,
         seed=seed,
         total_timesteps=total_timesteps,
+        use_softmax_policy=args.use_softmax_policy,
         **alg_kwargs
     )
 

@@ -39,7 +39,7 @@ class PlaceholderTfInput(TfInput):
 
 
 class ObservationInput(PlaceholderTfInput):
-    def __init__(self, observation_space, name=None):
+    def __init__(self, observation_space, name=None, extra_channels=0):
         """Creates an input placeholder tailored to a specific observation space
 
         Parameters
@@ -50,10 +50,13 @@ class ObservationInput(PlaceholderTfInput):
         name: str
                 tensorflow name of the underlying placeholder
         """
-        inpt, self.processed_inpt = observation_input(observation_space, name=name)
+        inpt, self.processed_inpt = observation_input(observation_space, name=name, extra_channels=extra_channels)
         super().__init__(inpt)
 
     def get(self):
         return self.processed_inpt
 
-
+import tensorflow as tf
+def softmax(x, beta):
+    sc = tf.math.scalar_mul(beta, x)
+    return tf.nn.softmax(sc, dim=-1)

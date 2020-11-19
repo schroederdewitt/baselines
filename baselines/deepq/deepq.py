@@ -116,6 +116,9 @@ def learn(env,
           param_noise=False,
           callback=None,
           load_path=None,
+          use_softmax_policy=False,
+          log_beta_range=None,
+          eval_log_betas=None,
           **network_kwargs
             ):
     """Train a deepq model.
@@ -194,19 +197,39 @@ def learn(env,
     # capture the shape outside the closure so that the env object is not serialized
     # by cloudpickle when serializing make_obs_ph
 
+    extra_channels = 0
+    if use_softmax_policy:
+        extra_channels = 1
+
     observation_space = env.observation_space
     def make_obs_ph(name):
-        return ObservationInput(observation_space, name=name)
+        return ObservationInput(observation_space, name=name, extra_channels=extra_channels)
 
-    act, train, update_target, debug = deepq.build_train(
-        make_obs_ph=make_obs_ph,
-        q_func=q_func,
-        num_actions=env.action_space.n,
-        optimizer=tf.train.AdamOptimizer(learning_rate=lr),
-        gamma=gamma,
-        grad_norm_clipping=10,
-        param_noise=param_noise
-    )
+    def make_log_beta(name):
+        return tf.placeholder((1,), dtype=np.float32, name="log_beta")
+
+    if use_softmax_policy:
+        act, train, update_target, debug = deepq.build_train_softmax(
+            make_obs_ph=make_obs_ph,
+            q_func=q_func,
+            num_actions=env.action_space.n,
+            optimizer=tf.train.AdamOptimizer(learning_rate=lr),
+            gamma=gamma,
+            grad_norm_clipping=10,
+            param_noise=param_noise
+        )
+    else:
+        act, train, update_target, debug = deepq.build_train(
+            make_obs_ph=make_obs_ph,
+            q_func=q_func,
+            num_actions=env.action_space.n,
+            optimizer=tf.train.AdamOptimizer(learning_rate=lr),
+            gamma=gamma,
+            grad_norm_clipping=10,
+            param_noise=param_noise,
+            use_softmax_policy=use_softmax_policy,
+        )
+
 
     act_params = {
         'make_obs_ph': make_obs_ph,
@@ -240,6 +263,12 @@ def learn(env,
     saved_mean_reward = None
     obs = env.reset()
     reset = True
+
+    sample_log_beta = lambda: None
+    if use_softmax_policy:
+        log_beta_0, log_beta_1 = [float(x) for x in log_beta_range.split(",")]
+        sample_log_beta = lambda: (log_beta_0 - log_beta_1) * np.random.random() + log_beta_1
+        log_beta = sample_log_beta()
 
     with tempfile.TemporaryDirectory() as td:
         td = checkpoint_path or td
@@ -275,12 +304,22 @@ def learn(env,
                 kwargs['reset'] = reset
                 kwargs['update_param_noise_threshold'] = update_param_noise_threshold
                 kwargs['update_param_noise_scale'] = True
-            action = act(np.array(obs)[None], update_eps=update_eps, **kwargs)[0]
+
+            if use_softmax_policy:
+                kwargs["log_beta"] = log_beta
+
+            #act_obs = np.array(obs)[None]
+            #if use_softmax_policy:
+            #    act_obs = np.concatenate([act_obs, np.zeros(act_obs.shape)],axis=-1)
+            actobs = np.array(obs)[None]
+            if use_softmax_policy:
+                actobs = actobs.astype(np.float32)
+            action = act(actobs, update_eps=update_eps, **kwargs)[0]
             env_action = action
             reset = False
             new_obs, rew, done, _ = env.step(env_action)
             # Store transition in the replay buffer.
-            replay_buffer.add(obs, action, rew, new_obs, float(done))
+            replay_buffer.add(obs, action, rew, new_obs, float(done), log_beta=log_beta)
             obs = new_obs
 
             episode_rewards[-1] += rew
@@ -288,16 +327,35 @@ def learn(env,
                 obs = env.reset()
                 episode_rewards.append(0.0)
                 reset = True
+                if use_softmax_policy:
+                    log_beta = sample_log_beta()
 
             if t > learning_starts and t % train_freq == 0:
+                log_betas = None
                 # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                 if prioritized_replay:
                     experience = replay_buffer.sample(batch_size, beta=beta_schedule.value(t))
-                    (obses_t, actions, rewards, obses_tp1, dones, weights, batch_idxes) = experience
+                    if use_softmax_policy:
+                        (obses_t, actions, rewards, obses_tp1, dones, log_betas, weights, batch_idxes) = experience
+                    else:
+                        (obses_t, actions, rewards, obses_tp1, dones, weights, batch_idxes) = experience
                 else:
-                    obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(batch_size)
+                    if use_softmax_policy:
+                        obses_t, actions, rewards, obses_tp1, dones, log_betas = replay_buffer.sample(batch_size)
+                    else:
+                        obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(batch_size)
                     weights, batch_idxes = np.ones_like(rewards), None
-                td_errors = train(obses_t, actions, rewards, obses_tp1, dones, weights)
+
+
+                train_obses_t = obses_t
+                train_obses_tp1 = obses_tp1
+                if use_softmax_policy:
+                    train_obses_t = np.concatenate([train_obses_t, np.zeros_like(train_obses_t)[..., 0:1] + log_beta], -1)
+                    train_obses_tp1 = np.concatenate([train_obses_tp1, np.zeros_like(train_obses_tp1)[..., 0:1] + log_beta],-1)
+                    td_errors = train(train_obses_t, actions, rewards, train_obses_tp1, dones, weights, log_betas)
+                else:
+                    td_errors = train(train_obses_t, actions, rewards, train_obses_tp1, dones, weights)
+
                 if prioritized_replay:
                     new_priorities = np.abs(td_errors) + prioritized_replay_eps
                     replay_buffer.update_priorities(batch_idxes, new_priorities)

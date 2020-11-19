@@ -175,6 +175,9 @@ def common_arg_parser():
     parser.add_argument('--getobs', default=False, action='store_true')
     parser.add_argument('--obsqs', default=False, action='store_true')
     parser.add_argument('--obs_path', help='Path to obs pickle file.', default=None, type=str)
+    parser.add_argument("--use_softmax_policy", type=int, default=0)
+    parser.add_argument("--log_beta_range", type=str, default="1,12")
+    parser.add_argument("--eval_log_betas", type=str, default="1,2,3,4,5,6,7,8,9,10,11,12")
     return parser
 
 def robotics_arg_parser():
